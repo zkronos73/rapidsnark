@@ -976,7 +976,7 @@ void Prover<Engine>::hashToFr(FrElement &element, u_int8_t *data, u_int64_t size
     // Keccak keccak;
     // std::string hash = keccak(data, size, true);
     // E.fr.fromRprBE(element, (const u_int8_t*) hash.c_str(), 32);
-    u_int8_t *hash[32];
+    u_int8_t hash[32];
     Keccak(1088, 512, data, size, 0x01, hash, sizeof(hash));
     E.fr.fromRprBE(element, hash, sizeof(hash));
 }

@@ -46,6 +46,7 @@ function buildProverServer() {
         " ../src/binfile_utils.cpp"+
         " ../src/zkey_utils.cpp"+
         " ../src/logger.cpp"+
+        " ../src/xkcp/Keccak-more-compact.cpp"+
         " ../depends/circom_runtime/c/calcwit.cpp"+
         " ../depends/circom_runtime/c/utils.cpp"+
         " ../depends/ffiasm/c/misc.cpp"+
@@ -75,6 +76,7 @@ function buildProver() {
         " ../src/zkey_utils.cpp"+
         " ../src/wtns_utils.cpp"+
         " ../src/logger.cpp"+
+        " ../src/xkcp/Keccak-more-compact.cpp"+
         " ../depends/ffiasm/c/misc.cpp"+
         " ../depends/ffiasm/c/naf.cpp"+
         " ../depends/ffiasm/c/splitparstr.cpp"+
