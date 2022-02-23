@@ -124,12 +124,12 @@ namespace Plonk {
         FrElements polQm4, polQl4, polQr4, polQo4, polQc4;
         
         FrElements witness;
-        FrElement beta;
-        FrElement gamma;
-        FrElement alpha;
-        FrElement xi;
+        FrElement chBeta;
+        FrElement chGamma;
+        FrElement chAlpha;
+        FrElement chXi;
+        FrElements chV;
         FrElement xim;
-        FrElements nu;
         
         FrElements randomBlindings;
 
@@ -195,8 +195,7 @@ namespace Plonk {
             dump(_E)
         { 
             fft = new FFT<typename Engine::Fr>(domainSize*4);
-            beta = E.fr.zero();
-            gamma = E.fr.zero();
+          
             k1 = _k1;
             k2 = _k2;
             qm = _qm;
@@ -250,12 +249,13 @@ namespace Plonk {
             void polynomialToMontgomery ( FrElements &polynomial );
             void polynomialFromMontgomery ( FrElements &polynomial );
             typename Engine::G1Point expTau ( FrElements &polynomial );
-            void calculateBeta ( void );
-            void calculateGamma ( void );
-            void calculateAlpha ( void );
-            void calculateXi ( void );
-            void calculateNu ( void );
+            void calculateChallengeBeta ( void );
+            void calculateChallengeGamma ( void );
+            void calculateChallengeAlpha ( void );
+            void calculateChallengeXi ( void );
+            void calculateChallengeV ( void );
             void computePermutationPolynomialZ ( void );
+            inline void computePermutationPolynomialZLoop ( int index, int n, FrElement &numerator, FrElement &denominator, const FrElement &betaW );
             void computeQuotientPolynomial ( void );
             FrElement evaluatePolynomial( const FrElements &pol, const FrElement &x );
             void loadFrElements ( FrElements &destination, const FrElement *source, u_int32_t offset, u_int32_t count, u_int32_t seek = 0 ); 
@@ -263,9 +263,6 @@ namespace Plonk {
             void calculateInverses ( FrElements &source );
             void multiplicateElements ( FrElements &destination, FrElements &a, FrElements &b );
             u_int64_t toRprBE(G1P &point, uint8_t *data, u_int64_t seek, u_int64_t size);
-            // u_int64_t toRprBE(FqElement &element, uint8_t *data, u_int64_t seek, u_int64_t size);
-            // u_int64_t toRprBE(FrElement &element, uint8_t *data, u_int64_t seek, u_int64_t size);
-            // void fromRprBE(FrElement &element, const uint8_t *data, u_int64_t size);
             void hashToFr(FrElement &element, u_int8_t *data, u_int64_t size);
             void settingZn ( void );
             inline void mul2 ( FrElement &r, FrElement &rz, const FrElement &a, const FrElement &b, const FrElement &ap, 

@@ -182,15 +182,15 @@ void Prover<Engine>::round1 ( void )
 template <typename Engine>
 void Prover<Engine>::round2 ( void ) 
 {
-    calculateBeta();
-    calculateGamma();
+    calculateChallengeBeta();
+    calculateChallengeGamma();
     computePermutationPolynomialZ();
 }
 
 template <typename Engine>
 void Prover<Engine>::round3 ( void ) 
 {
-    calculateAlpha();
+    calculateChallengeAlpha();
     settingZn();
     computeQuotientPolynomial();
 }
@@ -248,7 +248,10 @@ typename Prover<Engine>::FrElements Prover<Engine>::buildPolynomial ( FrElements
 template <typename Engine>
 void Prover<Engine>::computePermutationPolynomialZ ( void )
 {   
-    FrElement denominator, numerator, aux, betaW;
+    u_int32_t n = domainSize * 4;
+    FrElement denominator, numerator; 
+    FrElements betaW(n);
+
     FrElement w = E.fr.one();
     FrElements numerators(domainSize);
     FrElements denominators(domainSize);
@@ -256,55 +259,24 @@ void Prover<Engine>::computePermutationPolynomialZ ( void )
     numerators[0] = E.fr.one();
     denominators[0] = E.fr.one();
 
-
-    u_int32_t n = domainSize * 4;
     for (int index = 0 ; index < domainSize; index++) {
-        E.fr.mul(betaW, beta, w);
-
-        E.fr.add(numerator, A[index], betaW);
-        E.fr.add(numerator, numerator, gamma);
-
-        E.fr.mul(aux, k1, betaW);
-        E.fr.add(aux, aux, B[index]);
-        E.fr.add(aux, aux, gamma);
-        E.fr.mul(numerator, numerator, aux);
-
-        E.fr.mul(aux, k2, betaW);
-        E.fr.add(aux, aux, C[index]);
-        E.fr.add(aux, aux, gamma);
-        E.fr.mul(numerator, numerator, aux);
-
-        // get on out of 4 to recover the evaluations before extending 4. For example:
-        // [r1, r2] => [r1, r1.5, r2, r2.5] => [r1, r1.25, r1.5, r2, r2.25, r2.5, r2.75]
-        // on positions 0 and 4 are original roots.
-
-        // _w(j) + sigma(j) * beta + gamma
-        E.fr.mul(denominator, sigmaExt[index*4], beta);
-        E.fr.add(denominator, denominator, A[index]);
-        E.fr.add(denominator, denominator, gamma);
-
-        // _w(n+j) + sigma(n+j) * beta + gamma
-        E.fr.mul(aux, sigmaExt[n + index*4], beta);
-        E.fr.add(aux, aux, B[index]);
-        E.fr.add(aux, aux, gamma);
-        E.fr.mul(denominator, denominator, aux);
-
-        // _w(2n+j) + sigma(2n + j) * beta + gamma
-        E.fr.mul(aux, sigmaExt[2*n + index*4], beta);
-        E.fr.add(aux, aux, C[index]);
-        E.fr.add(aux, aux, gamma);
-        E.fr.mul(denominator, denominator, aux);
-
-        E.fr.mul(numerators[(index+1) % domainSize], numerators[index], numerator);
-        E.fr.mul(denominators[(index+1) % domainSize], denominators[index], denominator);
-
+        E.fr.mul(betaW[index], chBeta, w);
         E.fr.mul(w, w, wFactor);
     }
 
+    for (int index = 0 ; index < domainSize; index++) {
+        // computePermutationPolynomialZLoop(index, n, numerator, denominator, betaW);
+        computePermutationPolynomialZLoop(index, n, numerators[(index+1) % domainSize], numerators[(index+1) % domainSize], betaW[index]);
+    }
+
+    #pragma omp parallel for
+    for (int index = 0 ; index < domainSize; index++) {
+        E.fr.mul(numerators[(index+1) % domainSize], numerators[index], numerators[(index+1) % domainSize]);
+        E.fr.mul(denominators[(index+1) % domainSize], denominators[index], denominators[(index+1) % domainSize]);
+    }
 
     calculateInverses(denominators);  
 
-    // TODO (snarkjs): Do it in assembly and in parallel
     multiplicateElements(numerators, numerators, denominators);    
 
     ASSERT(E.fr.eq(numerators[0], E.fr.one()), "Copy Constraints does not match");
@@ -314,6 +286,45 @@ void Prover<Engine>::computePermutationPolynomialZ ( void )
     proofZ = expTau(polZ);
 }
 
+template <typename Engine>
+void Prover<Engine>::computePermutationPolynomialZLoop ( int index, int n, FrElement &numerator, FrElement &denominator, const FrElement &betaW ) 
+{
+    FrElement aux;
+    
+    E.fr.add(numerator, A[index], betaW);
+    E.fr.add(numerator, numerator, chGamma);
+
+    E.fr.mul(aux, k1, betaW);
+    E.fr.add(aux, aux, B[index]);
+    E.fr.add(aux, aux, chGamma);
+    E.fr.mul(numerator, numerator, aux);
+
+    E.fr.mul(aux, k2, betaW);
+    E.fr.add(aux, aux, C[index]);
+    E.fr.add(aux, aux, chGamma);
+    E.fr.mul(numerator, numerator, aux);
+
+    // get on out of 4 to recover the evaluations before extending 4. For example:
+    // [r1, r2] => [r1, r1.5, r2, r2.5] => [r1, r1.25, r1.5, r2, r2.25, r2.5, r2.75]
+    // on positions 0 and 4 are original roots.
+
+    // _w(j) + sigma(j) * chBeta + chGamma
+    E.fr.mul(denominator, sigmaExt[index*4], chBeta);
+    E.fr.add(denominator, denominator, A[index]);
+    E.fr.add(denominator, denominator, chGamma);
+
+    // _w(n+j) + sigma(n+j) * chBeta + chGamma
+    E.fr.mul(aux, sigmaExt[n + index*4], chBeta);
+    E.fr.add(aux, aux, B[index]);
+    E.fr.add(aux, aux, chGamma);
+    E.fr.mul(denominator, denominator, aux);
+
+    // _w(2n+j) + sigma(2n + j) * chBeta + chGamma
+    E.fr.mul(aux, sigmaExt[2*n + index*4], chBeta);
+    E.fr.add(aux, aux, C[index]);
+    E.fr.add(aux, aux, chGamma);
+    E.fr.mul(denominator, denominator, aux);
+}
 
 template <typename Engine>
 void Prover<Engine>::mul2 ( FrElement &r, FrElement &rz, const FrElement &a, const FrElement &b, 
@@ -382,13 +393,18 @@ void Prover<Engine>::mul4 ( FrElement &r, FrElement &rz, const FrElement &a, con
 template <typename Engine>
 void Prover<Engine>::computeQuotientPolynomial ( void )
 {   
-    auto w = E.fr.one();
     int domainSize4 = domainSize * 4;
     FrElements _T(domainSize * 4);
     FrElements _Tz(domainSize * 4);
     FrElement wFactorPlus2 = fft->root(domainPower+2, 1);
 
+    FrElements w(domainSize4);
+    w[0] = E.fr.one();
+    for (u_int64_t i = 1; i < domainSize4; ++ i) {
+        E.fr.mul(w[i], w[i-1], wFactorPlus2);        
+    }
 
+    #pragma omp parallel for
     for (u_int64_t i = 0; i < domainSize4; ++ i) {
         auto a = polA4[i];
         auto b = polB4[i];
@@ -403,12 +419,12 @@ void Prover<Engine>::computeQuotientPolynomial ( void )
         auto s1 = sigmaExt[i];
         auto s2 = sigmaExt[domainSize*4 + i];
         auto s3 = sigmaExt[domainSize*8 + i];
-        auto ap = E.fr.add(randomBlindings[2], E.fr.mul(randomBlindings[1], w));
-        auto bp = E.fr.add(randomBlindings[4], E.fr.mul(randomBlindings[3], w));
-        auto cp = E.fr.add(randomBlindings[6], E.fr.mul(randomBlindings[5], w));
-        auto w2 = E.fr.square(w);
-        auto zp = E.fr.add(E.fr.add(E.fr.mul(randomBlindings[7], w2), E.fr.mul(randomBlindings[8], w)), randomBlindings[9]);
-        auto wW = E.fr.mul(w, wFactor);
+        auto ap = E.fr.add(randomBlindings[2], E.fr.mul(randomBlindings[1], w[i]));
+        auto bp = E.fr.add(randomBlindings[4], E.fr.mul(randomBlindings[3], w[i]));
+        auto cp = E.fr.add(randomBlindings[6], E.fr.mul(randomBlindings[5], w[i]));
+        auto w2 = E.fr.square(w[i]);
+        auto zp = E.fr.add(E.fr.add(E.fr.mul(randomBlindings[7], w2), E.fr.mul(randomBlindings[8], w[i])), randomBlindings[9]);
+        auto wW = E.fr.mul(w[i], wFactor);
         auto wW2 = E.fr.square(wW);
         auto zWp = E.fr.add(E.fr.add(E.fr.mul(randomBlindings[7], wW2), E.fr.mul(randomBlindings[8], wW)), randomBlindings[9]);
 
@@ -434,18 +450,16 @@ void Prover<Engine>::computeQuotientPolynomial ( void )
         e1 = E.fr.add(e1, pl);
         e1 = E.fr.add(e1, qc);
 
-        const FrElement betaw = E.fr.mul(beta, w);
-        FrElement e2a = a;
-        e2a = E.fr.add(e2a, betaw);
-        e2a = E.fr.add(e2a, gamma);
+        FrElement betaW = E.fr.mul(chBeta, w[i]);
+        FrElement e2a = E.fr.add(a, betaW);
+        e2a = E.fr.add(e2a, chGamma);
 
-        FrElement e2b = b;
-        e2b = E.fr.add(e2b, E.fr.mul(betaw, k1));
-        e2b = E.fr.add(e2b, gamma);
+        FrElement e2b = E.fr.add(b, E.fr.mul(betaW, k1));
+        e2b = E.fr.add(e2b, chGamma);
 
         FrElement e2c = c;
-        e2c = E.fr.add(e2c, E.fr.mul(betaw, k2));
-        e2c = E.fr.add(e2c, gamma);
+        e2c = E.fr.add(e2c, E.fr.mul(betaW, k2));
+        e2c = E.fr.add(e2c, chGamma);
 
         FrElement e2d = z;
 
@@ -453,46 +467,46 @@ void Prover<Engine>::computeQuotientPolynomial ( void )
         FrElement e2z;
         
         mul4(e2, e2z, e2a, e2b, e2c, e2d, ap, bp, cp, zp, i%4);
-        e2 = E.fr.mul(e2, alpha);
-        e2z = E.fr.mul(e2z, alpha);
+        e2 = E.fr.mul(e2, chAlpha);
+        e2z = E.fr.mul(e2z, chAlpha);
 
         FrElement e3a = a;
-        e3a = E.fr.add(e3a, E.fr.mul(beta, s1));
-        e3a = E.fr.add(e3a, gamma);
+        e3a = E.fr.add(e3a, E.fr.mul(chBeta, s1));
+        e3a = E.fr.add(e3a, chGamma);
 
         FrElement e3b = b;
-        e3b = E.fr.add(e3b, E.fr.mul(beta,s2));
-        e3b = E.fr.add(e3b, gamma);
+        e3b = E.fr.add(e3b, E.fr.mul(chBeta,s2));
+        e3b = E.fr.add(e3b, chGamma);
 
         FrElement e3c = c;
-        e3c = E.fr.add(e3c, E.fr.mul(beta,s3));
-        e3c = E.fr.add(e3c, gamma);
+        e3c = E.fr.add(e3c, E.fr.mul(chBeta,s3));
+        e3c = E.fr.add(e3c, chGamma);
 
         FrElement e3d = zw;
         FrElement e3;
         FrElement e3z;
         mul4(e3, e3z, e3a, e3b, e3c, e3d, ap, bp, cp, zWp, i%4);
 
-        e3 = E.fr.mul(e3, alpha);
-        e3z = E.fr.mul(e3z, alpha);
+        e3 = E.fr.mul(e3, chAlpha);
+        e3z = E.fr.mul(e3z, chAlpha);
 
         FrElement e4 = E.fr.sub(z, E.fr.one());
         e4 = E.fr.mul(e4, lPols[domainSize + i]);
-        e4 = E.fr.mul(e4, E.fr.mul(alpha, alpha));
+        e4 = E.fr.mul(e4, E.fr.mul(chAlpha, chAlpha));
 
         FrElement e4z = E.fr.mul(zp, lPols[domainSize +i]);
-        e4z = E.fr.mul(e4z, E.fr.mul(alpha, alpha));
+        e4z = E.fr.mul(e4z, E.fr.mul(chAlpha, chAlpha));
 
         FrElement e = E.fr.add(E.fr.sub(E.fr.add(e1, e2), e3), e4);
         FrElement ez = E.fr.add(E.fr.sub(E.fr.add(e1z, e2z), e3z), e4z);
 
         _T[i] = e;
         _Tz[i] = ez;
-
-        w = E.fr.mul(w, wFactorPlus2);
     }
 
     evaluationsToCoefficients(_T);
+
+    #pragma omp parallel for
     for (u_int64_t i = 0; i < domainSize; ++i) {
         _T[i] = E.fr.neg(_T[i]);
     }
@@ -505,6 +519,7 @@ void Prover<Engine>::computeQuotientPolynomial ( void )
     }
     evaluationsToCoefficients(_Tz);
 
+    #pragma omp parallel for
     for (u_int64_t i = 0; i < domainSize4; ++i) {
         if (i > (domainSize*3+5) ) {
             stringstream ss;
@@ -544,47 +559,47 @@ typename Prover<Engine>::FrElement Prover<Engine>::evaluatePolynomial( const FrE
 template <typename Engine>
 void Prover<Engine>::round4( void ) 
 {
-    calculateXi();
+    calculateChallengeXi();
 
-    proofEvalA = evaluatePolynomial(polA, xi);
-    proofEvalB = evaluatePolynomial(polB, xi);
-    proofEvalC = evaluatePolynomial(polC, xi);
-    proofEvalS1 = evaluatePolynomial(polS1, xi);
-    proofEvalS2 = evaluatePolynomial(polS2, xi);
-    proofEvalT = evaluatePolynomial(polT, xi);
-    proofEvalZw = evaluatePolynomial(polZ, E.fr.mul(xi, wFactor));
+    proofEvalA = evaluatePolynomial(polA, chXi);
+    proofEvalB = evaluatePolynomial(polB, chXi);
+    proofEvalC = evaluatePolynomial(polC, chXi);
+    proofEvalS1 = evaluatePolynomial(polS1, chXi);
+    proofEvalS2 = evaluatePolynomial(polS2, chXi);
+    proofEvalT = evaluatePolynomial(polT, chXi);
+    proofEvalZw = evaluatePolynomial(polZ, E.fr.mul(chXi, wFactor));
 
     FrElement coef_ab = E.fr.mul(proofEvalA, proofEvalB);   
     FrElement e2a = proofEvalA;
-    FrElement betaxi = E.fr.mul(beta, xi);
+    FrElement betaxi = E.fr.mul(chBeta, chXi);
 
     e2a = E.fr.add( e2a, betaxi);
-    e2a = E.fr.add( e2a, gamma);
+    e2a = E.fr.add( e2a, chGamma);
 
     FrElement e2b = proofEvalB;
     e2b = E.fr.add( e2b, E.fr.mul(betaxi, k1));
-    e2b = E.fr.add( e2b, gamma);
+    e2b = E.fr.add( e2b, chGamma);
 
     FrElement e2c = proofEvalC;
     e2c = E.fr.add( e2c, E.fr.mul(betaxi, k2));
-    e2c = E.fr.add( e2c, gamma);
+    e2c = E.fr.add( e2c, chGamma);
 
-    FrElement e2 = E.fr.mul(E.fr.mul(E.fr.mul(e2a, e2b), e2c), alpha);
+    FrElement e2 = E.fr.mul(E.fr.mul(E.fr.mul(e2a, e2b), e2c), chAlpha);
     
     FrElement e3a = proofEvalA;
-    e3a = E.fr.add( e3a, E.fr.mul(beta, proofEvalS1));
-    e3a = E.fr.add( e3a, gamma);
+    e3a = E.fr.add( e3a, E.fr.mul(chBeta, proofEvalS1));
+    e3a = E.fr.add( e3a, chGamma);
 
     FrElement e3b = proofEvalB;
-    e3b = E.fr.add( e3b, E.fr.mul(beta, proofEvalS2));
-    e3b = E.fr.add( e3b, gamma);
+    e3b = E.fr.add( e3b, E.fr.mul(chBeta, proofEvalS2));
+    e3b = E.fr.add( e3b, chGamma);
 
     FrElement e3 = E.fr.mul(e3a, e3b);
-    e3 = E.fr.mul(e3, beta);
+    e3 = E.fr.mul(e3, chBeta);
     e3 = E.fr.mul(e3, proofEvalZw);
-    e3 = E.fr.mul(e3, alpha);
+    e3 = E.fr.mul(e3, chAlpha);
     
-    xim = xi;
+    xim = chXi;
     for (u_int64_t i=0; i<domainPower; i++) {
         xim = E.fr.mul(xim, xim);
     }
@@ -592,15 +607,16 @@ void Prover<Engine>::round4( void )
     FrElement eval_l1;
     E.fr.div(eval_l1,
         E.fr.sub(xim, E.fr.one()),
-        E.fr.mul(E.fr.sub(xi, E.fr.one()), domainSize)
+        E.fr.mul(E.fr.sub(chXi, E.fr.one()), domainSize)
     );
 
-    FrElement e4 = E.fr.mul(eval_l1, E.fr.mul(alpha, alpha));
+    FrElement e4 = E.fr.mul(eval_l1, E.fr.mul(chAlpha, chAlpha));
     FrElement coefs3 = e3;
     FrElement coefz = E.fr.add(e2, e4);
 
     polR.resize(domainSize + 3);
 
+    #pragma omp parallel for
     for (u_int64_t i = 0; i < (domainSize+3); i++) {
         FrElement v = E.fr.mul(coefz, polZ[i]);
         if (i < domainSize) {
@@ -613,7 +629,7 @@ void Prover<Engine>::round4( void )
         }
         polR[i] = v;
     }
-    proofEvalR = evaluatePolynomial(polR, xi);
+    proofEvalR = evaluatePolynomial(polR, chXi);
 }
 
 template <typename Engine>
@@ -641,47 +657,48 @@ void Prover<Engine>::settingZn ( void )
 template <typename Engine>
 void Prover<Engine>::round5( void ) 
 {
-    calculateNu();
+    calculateChallengeV();
 
     u_int64_t extraDomainSize = domainSize + 6;
     FrElements polWxi(extraDomainSize);
     FrElement xi2m = E.fr.mul(xim, xim);
 
+    #pragma omp parallel for
     for (u_int64_t i = 0; i < extraDomainSize; i++) {
         FrElement w = E.fr.zero();
         w = E.fr.add(w, E.fr.mul(xi2m, polT[domainSize * 2 + i]));
 
         if (i < domainSize+3) {
-            w = E.fr.add(w, E.fr.mul(nu[1],  polR[i]));
+            w = E.fr.add(w, E.fr.mul(chV[1],  polR[i]));
         }
 
         if (i < domainSize+2) {
-            // w = w + nu[2] * polA[i] + nu[3] * polB[i] + nu[4] * polC[i];
-            w = E.fr.add(w, E.fr.mul(nu[2],  polA[i]));
-            w = E.fr.add(w, E.fr.mul(nu[3],  polB[i]));
-            w = E.fr.add(w, E.fr.mul(nu[4],  polC[i]));
+            // w = w + chV[2] * polA[i] + chV[3] * polB[i] + chV[4] * polC[i];
+            w = E.fr.add(w, E.fr.mul(chV[2],  polA[i]));
+            w = E.fr.add(w, E.fr.mul(chV[3],  polB[i]));
+            w = E.fr.add(w, E.fr.mul(chV[4],  polC[i]));
         }
         
         if (i < domainSize) {
-            // w = w + polT[i] + xim * polT[n + i] + nu[5] * polS1[i] + nu[6] * polS2[i];
+            // w = w + polT[i] + xim * polT[n + i] + chV[5] * polS1[i] + chV[6] * polS2[i];
             w = E.fr.add(w, polT[i]);
             w = E.fr.add(w, E.fr.mul(xim, polT[domainSize + i]));
-            w = E.fr.add(w, E.fr.mul(nu[5], polS1[i]));
-            w = E.fr.add(w, E.fr.mul(nu[6], polS2[i]));
+            w = E.fr.add(w, E.fr.mul(chV[5], polS1[i]));
+            w = E.fr.add(w, E.fr.mul(chV[6], polS2[i]));
         }
 
         polWxi[i] = w;
     }
 
     polWxi[0] = E.fr.sub(polWxi[0], proofEvalT);
-    polWxi[0] = E.fr.sub(polWxi[0], E.fr.mul(nu[1], proofEvalR));
-    polWxi[0] = E.fr.sub(polWxi[0], E.fr.mul(nu[2], proofEvalA));
-    polWxi[0] = E.fr.sub(polWxi[0], E.fr.mul(nu[3], proofEvalB));
-    polWxi[0] = E.fr.sub(polWxi[0], E.fr.mul(nu[4], proofEvalC));
-    polWxi[0] = E.fr.sub(polWxi[0], E.fr.mul(nu[5], proofEvalS1));
-    polWxi[0] = E.fr.sub(polWxi[0], E.fr.mul(nu[6], proofEvalS2));    
+    polWxi[0] = E.fr.sub(polWxi[0], E.fr.mul(chV[1], proofEvalR));
+    polWxi[0] = E.fr.sub(polWxi[0], E.fr.mul(chV[2], proofEvalA));
+    polWxi[0] = E.fr.sub(polWxi[0], E.fr.mul(chV[3], proofEvalB));
+    polWxi[0] = E.fr.sub(polWxi[0], E.fr.mul(chV[4], proofEvalC));
+    polWxi[0] = E.fr.sub(polWxi[0], E.fr.mul(chV[5], proofEvalS1));
+    polWxi[0] = E.fr.sub(polWxi[0], E.fr.mul(chV[6], proofEvalS2));    
 
-    polWxi = div1(polWxi, xi);
+    polWxi = div1(polWxi, chXi);
 
     proofWxi = expTau(polWxi);
 
@@ -689,7 +706,7 @@ void Prover<Engine>::round5( void )
 
     polWxiw[0] = E.fr.sub(polWxiw[0], proofEvalZw);
 
-    polWxiw = div1(polWxiw, E.fr.mul(xi, wFactor));
+    polWxiw = div1(polWxiw, E.fr.mul(chXi, wFactor));
 
     proofWxiw = expTau(polWxiw);
 }
@@ -739,6 +756,7 @@ void Prover<Engine>::multiplicateElements(FrElements &destination, FrElements &a
     u_int64_t elementsCount = a.size();
     destination.resize(elementsCount);
 
+    #pragma omp parallel for
     for (u_int64_t index = 0; index < elementsCount; index++)
     {
         E.fr.mul(destination[index], a[index], b[index]);
@@ -777,6 +795,7 @@ template <typename Engine>
 typename Prover<Engine>::FrElements Prover<Engine>::extendPolynomial ( const FrElements &polynomial, u_int32_t size ) 
 {
     FrElements polynomial4T(size);
+    #pragma omp parallel for
     for (u_int32_t index = 0; index < size; ++index) {
         polynomial4T[index] = (index < polynomial.size()) ? polynomial[index] : E.fr.zero();
         // polynomial4T[index] = polynomial[index % polynomial.size()];
@@ -801,6 +820,7 @@ inline void Prover<Engine>::coefficientsToEvaluations ( FrElements &polynomial )
 template <typename Engine>
 void Prover<Engine>::setMontgomeryPolynomialFromWitnessMap ( FrElements &polynomial, u_int32_t *map) 
 {
+    #pragma omp parallel for
     for (int i=0; i<nConstrains; ++i) {
         FrElement aux;
         
@@ -812,6 +832,7 @@ void Prover<Engine>::setMontgomeryPolynomialFromWitnessMap ( FrElements &polynom
 template <typename Engine>
 void Prover<Engine>::polynomialToMontgomery ( FrElements &polynomial ) 
 {
+    #pragma omp parallel for
     for (u_int32_t index=0; index<polynomial.size(); ++index) {
         E.fr.toMontgomery(polynomial[index], polynomial[index]);
     }
@@ -820,6 +841,7 @@ void Prover<Engine>::polynomialToMontgomery ( FrElements &polynomial )
 template <typename Engine>
 void Prover<Engine>::polynomialFromMontgomery ( FrElements &polynomial ) 
 {
+    #pragma omp parallel for
     for (u_int32_t index=0; index<polynomial.size(); ++index) {
         E.fr.fromMontgomery(polynomial[index], polynomial[index]);
     }
@@ -981,7 +1003,7 @@ void Prover<Engine>::hashToFr(FrElement &element, u_int8_t *data, u_int64_t size
 }
 
 template <typename Engine>
-void Prover<Engine>::calculateBeta(void)
+void Prover<Engine>::calculateChallengeBeta(void)
 {
     u_int8_t data[E.g1.F.N64 * 8 * 2 * 3];
     size_t bytes = 0;
@@ -992,31 +1014,31 @@ void Prover<Engine>::calculateBeta(void)
     bytes += toRprBE(proofB, data, bytes, sizeof(data));
     bytes += toRprBE(proofC, data, bytes, sizeof(data));
 
-    hashToFr(beta, data, bytes);
+    hashToFr(chBeta, data, bytes);
 }
 
 template <typename Engine>
-void Prover<Engine>::calculateGamma(void)
+void Prover<Engine>::calculateChallengeGamma(void)
 {
     u_int8_t data[E.fr.bytes()];
     size_t bytes = 0;
 
-    bytes = E.fr.toRprBE(beta, data, sizeof(data));
-    hashToFr(gamma, data, bytes);
+    bytes = E.fr.toRprBE(chBeta, data, sizeof(data));
+    hashToFr(chGamma, data, bytes);
 }
 
 template <typename Engine>
-void Prover<Engine>::calculateAlpha(void)
+void Prover<Engine>::calculateChallengeAlpha(void)
 {
     u_int8_t data[E.fr.bytes() * 2];
     size_t bytes = 0;
 
     bytes = toRprBE(proofZ, data, 0, sizeof(data));
-    hashToFr(alpha, data, bytes);
+    hashToFr(chAlpha, data, bytes);
 }
 
 template <typename Engine>
-void Prover<Engine>::calculateXi(void)
+void Prover<Engine>::calculateChallengeXi(void)
 {
     u_int8_t data[E.g1.F.bytes() * 2 * 3];
     size_t bytes = 0;
@@ -1027,15 +1049,15 @@ void Prover<Engine>::calculateXi(void)
     bytes += toRprBE(proofT2, data, bytes, sizeof(data));
     bytes += toRprBE(proofT3, data, bytes, sizeof(data));
 
-    hashToFr(xi, data, bytes);
+    hashToFr(chXi, data, bytes);
 }
 
 template <typename Engine>
-void Prover<Engine>::calculateNu(void)
+void Prover<Engine>::calculateChallengeV(void)
 {
     u_int8_t data[E.fr.bytes() * 7];
     size_t bytes = 0;
-    nu.resize(7);
+    chV.resize(7);
 
     memset(data, 0, sizeof(data));
 
@@ -1047,9 +1069,9 @@ void Prover<Engine>::calculateNu(void)
     bytes += E.fr.toRprBE(proofEvalZw, data + bytes, sizeof(data));
     bytes += E.fr.toRprBE(proofEvalR, data + bytes, sizeof(data));
 
-    hashToFr(nu[1], data, bytes);
+    hashToFr(chV[1], data, bytes);
     for (int i=2; i<=6; i++) {
-        nu[i] = E.fr.mul(nu[i-1], nu[1]);
+        chV[i] = E.fr.mul(chV[i-1], chV[1]);
     }
 }
 
