@@ -7,7 +7,7 @@ using namespace CPlusPlusLogging;
 namespace Groth16 {
 
 template <typename Engine>
-std::unique_ptr<Prover<Engine>> makeProver(
+std::unique_ptr<::Prover<Engine>> makeProver(
     u_int32_t nVars, 
     u_int32_t nPublic, 
     u_int32_t domainSize, 
@@ -46,7 +46,7 @@ std::unique_ptr<Prover<Engine>> makeProver(
 }
 
 template <typename Engine>
-std::unique_ptr<Proof<Engine>> Prover<Engine>::prove(typename Engine::FrElement *wtns) {
+std::unique_ptr<::Proof<Engine>> Prover<Engine>::prove(typename Engine::FrElement *wtns) {
 
     LOG_TRACE("Start Initializing a b c A");
     auto a = new typename Engine::FrElement[domainSize];

@@ -14,6 +14,7 @@
 #include "zkey_utils.hpp"
 #include "wtns_utils.hpp"
 #include "groth16.hpp"
+#include "plonk.hpp"
 
 using json = nlohmann::json;
 
@@ -46,15 +47,18 @@ int main(int argc, char **argv) {
         if (mpz_cmp(zkeyHeader->rPrime, altBbn128r) != 0) {
             throw std::invalid_argument( "zkey curve not supported" );
         }
-
+        
         auto wtns = BinFileUtils::openExisting(wtnsFilename, "wtns", 2);
         auto wtnsHeader = WtnsUtils::loadHeader(wtns.get());
-
+        
         if (mpz_cmp(wtnsHeader->prime, altBbn128r) != 0) {
             throw std::invalid_argument( "different wtns curve" );
         }
 
-        auto prover = Groth16::makeProver<AltBn128::Engine>(
+    std::unique_ptr<Prover<AltBn128::Engine>, std::default_delete<Prover<AltBn128::Engine> > > prover;
+
+    if (zkeyHeader->protocol == 1) {
+        prover = Groth16::makeProver<AltBn128::Engine>(
             zkeyHeader->nVars,
             zkeyHeader->nPublic,
             zkeyHeader->domainSize,
@@ -71,6 +75,38 @@ int main(int argc, char **argv) {
             zkey->getSectionData(8),    // pointsC
             zkey->getSectionData(9)     // pointsH1
         );
+    }
+    else {
+        prover = Plonk::makeProver<AltBn128::Engine>(
+            zkeyHeader->nVars,
+            zkeyHeader->nPublic,
+            zkeyHeader->domainSize,
+            zkeyHeader->nConstrains,
+            zkeyHeader->nAdditions,
+            zkey->getSectionSize(13),
+            zkey->getSectionSize(14),
+            zkeyHeader->k1,
+            zkeyHeader->k2,
+            zkeyHeader->qm,
+            zkeyHeader->ql,
+            zkeyHeader->qr,
+            zkeyHeader->qo,
+            zkeyHeader->qc,
+            zkey->getSectionData(3),    // Additions
+            zkey->getSectionData(4),    // aMap
+            zkey->getSectionData(5),    // bMap
+            zkey->getSectionData(6),    // cMap
+            zkey->getSectionData(7),    // QM4
+            zkey->getSectionData(8),    // QL4
+            zkey->getSectionData(9),    // QR4
+            zkey->getSectionData(10),   // QO4
+            zkey->getSectionData(11),   // QC4
+            zkey->getSectionData(13),   // lpols
+            zkey->getSectionData(14),   // Tau
+            zkey->getSectionData(12)    // Sigma1, Sigma2, Sigma3 (pol, pol-ext)
+        );
+    }
+
         AltBn128::FrElement *wtnsData = (AltBn128::FrElement *)wtns->getSectionData(2);
         auto proof = prover->prove(wtnsData);
 

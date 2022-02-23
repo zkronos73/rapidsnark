@@ -29,6 +29,23 @@ namespace ZKeyUtils {
         void *vk_delta1;
         void *vk_delta2;
 
+        u_int32_t nAdditions;
+        u_int32_t nConstrains;
+
+        void *k1;
+        void *k2;
+        void *qm;
+        void *ql;
+        void *qr;
+        void *qo;
+        void *qc;
+        void *s1;
+        void *s2;
+        void *s3;
+        void *x2;
+        
+        u_int32_t protocol;
+        
         Header();
         ~Header();
     };

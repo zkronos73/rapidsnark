@@ -1,17 +1,16 @@
-#ifndef GROTH16_HPP
-#define GROTH16_HPP
-
 #include <string>
 #include <nlohmann/json.hpp>
 using json = nlohmann::json;
 
 #include "binfile_utils.hpp"
 #include "fft.hpp"
+#include "prover.hpp"
+#include "proof.hpp"
 
 namespace Groth16 {
 
     template <typename Engine>
-    class Proof {
+    class Proof: public ::Proof<Engine> {
         Engine &E;
     public:
         typename Engine::G1PointAffine A;
@@ -35,7 +34,7 @@ namespace Groth16 {
 #pragma pack(pop)
 
     template <typename Engine>
-    class Prover {
+    class Prover: public ::Prover<Engine> {
 
         Engine &E;
         u_int32_t nVars;
@@ -98,11 +97,11 @@ namespace Groth16 {
             delete fft;
         }
 
-        std::unique_ptr<Proof<Engine>> prove(typename Engine::FrElement *wtns);
+        std::unique_ptr<::Proof<Engine>> prove(typename Engine::FrElement *wtns);
     };
 
     template <typename Engine>
-    std::unique_ptr<Prover<Engine>> makeProver(
+    std::unique_ptr<::Prover<Engine>> makeProver(
         u_int32_t nVars, 
         u_int32_t nPublic, 
         u_int32_t domainSize, 
@@ -123,5 +122,3 @@ namespace Groth16 {
 
 
 #include "groth16.cpp"
-
-#endif
