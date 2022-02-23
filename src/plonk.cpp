@@ -3,7 +3,7 @@
 #include <fcntl.h>
 
 #include <sodium.h>
-#include "xkcp/Keccak.hpp"
+#include "../depends/xkcp/Standalone/CompactFIPS202/C/Keccak-more-compact.c"
 
 #include <iostream>
 #include <iomanip>
@@ -185,7 +185,6 @@ void Prover<Engine>::round2 ( void )
     calculateBeta();
     calculateGamma();
     computePermutationPolynomialZ();
-    // computeZG1();
 }
 
 template <typename Engine>
