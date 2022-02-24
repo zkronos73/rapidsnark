@@ -18,101 +18,27 @@ using namespace CPlusPlusLogging;
 namespace Plonk {
 
 template <typename Engine>
-std::unique_ptr<::Prover<Engine>> makeProver(
-    u_int32_t nVars, 
-    u_int32_t nPublic, 
-    u_int32_t domainSize,
-    u_int32_t nConstrains,
-    u_int32_t nAdditions,
-    u_int32_t lPolsSize,
-    u_int32_t nPtau,
-    void *k1,
-    void *k2,
-    void *qm,
-    void *ql,
-    void *qr,
-    void *qo,
-    void *qc,
-    void *additions,
-    void *mapA,
-    void *mapB,
-    void *mapC,
-    void *QM,
-    void *QL,
-    void *QR,
-    void *QO,
-    void *QC,
-    void *lPols,
-    void *ptau,
-    void *sigmas
-) {
-    Prover<Engine> *p = new Prover<Engine>(
-        Engine::engine, 
-        nVars, 
-        nPublic, 
-        domainSize, 
-        nConstrains,
-        nAdditions,
-        lPolsSize,
-        nPtau,
-        *(typename Engine::FrElement *) k1,
-        *(typename Engine::FrElement *) k2,
-        *(typename Engine::FrElement *) qm,
-        *(typename Engine::FrElement *) ql,
-        *(typename Engine::FrElement *) qr,
-        *(typename Engine::FrElement *) qo,
-        *(typename Engine::FrElement *) qc,
-        (Additional<Engine> *)((uint64_t) additions),
-        (u_int32_t *)mapA,
-        (u_int32_t *)mapB,
-        (u_int32_t *)mapC,
-        (typename Engine::FrElement *) QM,
-        (typename Engine::FrElement *) QL,
-        (typename Engine::FrElement *) QR,
-        (typename Engine::FrElement *) QO,
-        (typename Engine::FrElement *) QC,        
-        (typename Engine::FrElement *) lPols,        
-        (typename Engine::G1PointAffine *)ptau,
-        (typename Engine::FrElement *) sigmas
-    );
-    return std::unique_ptr< Prover<Engine> >(p);
-}
-
-template <typename Engine>
-std::unique_ptr<::Proof<Engine>> Prover<Engine>::prove(FrElement *wtns) {
-    FrElements internalWitness(nAdditions);
-
+std::unique_ptr<::Proof<Engine>> Prover<Engine>::prove(FrElement *wtns)
+{
     try {
-        LOG_TRACE("Plonk - load widness");
         loadWitness(wtns);
-
-        LOG_TRACE("Plonk - calculate additions");
         calculateAdditions();
         
-        LOG_TRACE("Plonk - Round 1");
         round1();
-
-        LOG_TRACE("Plonk - Round 2");
         round2();
-
-        LOG_TRACE("Plonk - Round 3");
         round3();
-
-        LOG_TRACE("Plonk - Round 4");
         round4();
-
-        LOG_TRACE("Plonk - Round 5");
         round5();
+
+        Proof<Engine> *p = new Proof<Engine>(Engine::engine);
+        composeProof(*p);
+
+        return std::unique_ptr<Proof<Engine>>(p);
     } 
     catch (const std::exception &e) {
         std::cerr << "EXCEPTION: " << e.what() << "\n";
+        exit(EXIT_FAILURE);
     }
-
-    LOG_TRACE("Plonk - compose proof");
-    Proof<Engine> *p = new Proof<Engine>(Engine::engine);
-    composeProof(*p);
-
-    return std::unique_ptr<Proof<Engine>>(p);
 }
 
 template <typename Engine>
@@ -128,14 +54,14 @@ void Prover<Engine>::loadSigmas(FrElement *sigmas)
 }
 
 template <typename Engine>
-void Prover<Engine>::loadFrElements(FrElements &destination, const FrElement *source, u_int32_t offset, u_int32_t count, u_int32_t seek) 
+void Prover<Engine>::loadFrElements(FrElements &destination, const FrElement *source, int64_t offset, int64_t count, int64_t seek) 
 {
     if (destination.size() < (seek + count)) {
         destination.resize(seek + count);
     }
     
     #pragma omp parallel for
-    for (auto i = 0; i < count; ++i) {
+    for (int64_t i = 0; i < count; ++i) {
         destination[seek + i] = source[offset + i];
     }
 }
@@ -143,11 +69,13 @@ void Prover<Engine>::loadFrElements(FrElements &destination, const FrElement *so
 template <typename Engine>
 void Prover<Engine>::loadWitness(FrElement *wtns) 
 {
-    size_t nWitness = nVars - nAdditions;
+    LOG_TRACE("Plonk - load widness");
+
+    int64_t nWitness = nVars - nAdditions;
     witness.resize(nWitness);
 
     #pragma omp parallel for
-    for (int i = 1; i < nWitness; ++i) {
+    for (int64_t i = 1; i < nWitness; ++i) {
         witness[i] = wtns[i];
     }
 
@@ -159,6 +87,8 @@ void Prover<Engine>::loadWitness(FrElement *wtns)
 template <typename Engine>
 void Prover<Engine>::round1 ( void ) 
 {
+    LOG_TRACE("Plonk - Round 1");
+
     generateRandomBlindingScalars(randomBlindings);
 
     setMontgomeryPolynomialFromWitnessMap(A, mapA);
@@ -182,6 +112,8 @@ void Prover<Engine>::round1 ( void )
 template <typename Engine>
 void Prover<Engine>::round2 ( void ) 
 {
+    LOG_TRACE("Plonk - Round 2");
+
     calculateChallengeBeta();
     calculateChallengeGamma();
     computePermutationPolynomialZ();
@@ -190,6 +122,8 @@ void Prover<Engine>::round2 ( void )
 template <typename Engine>
 void Prover<Engine>::round3 ( void ) 
 {
+    LOG_TRACE("Plonk - Round 3");
+
     calculateChallengeAlpha();
     settingZn();
     computeQuotientPolynomial();
@@ -227,10 +161,10 @@ typename Prover<Engine>::FrElements Prover<Engine>::buildPolynomial ( FrElements
     coefficientsToEvaluations(polynomial4T);
 
     polynomial.resize(polynomial.size() + randomBlindingIndexs.size());
-    u_int32_t nthIndex = domainSize;
+    int64_t nthIndex = domainSize;
 
     // (b1X + b2) ZH(X) => (b1X + b2) (X^n - 1) = b2X^n - b2 + b1X^n+1 - b1X
-    for (u_int32_t index = 0; index < randomBlindingIndexs.size(); ++index) {
+    for (int64_t index = 0; index < randomBlindingIndexs.size(); ++index) {
         // b2X^n , b1X^n+1, ...
         E.fr.add(polynomial[nthIndex + index], 
                  polynomial[nthIndex + index], 
@@ -248,8 +182,7 @@ typename Prover<Engine>::FrElements Prover<Engine>::buildPolynomial ( FrElements
 template <typename Engine>
 void Prover<Engine>::computePermutationPolynomialZ ( void )
 {   
-    u_int32_t n = domainSize * 4;
-    FrElement denominator, numerator; 
+    int64_t n = domainSize * 4;
     FrElements betaW(n);
 
     FrElement w = E.fr.one();
@@ -259,20 +192,22 @@ void Prover<Engine>::computePermutationPolynomialZ ( void )
     numerators[0] = E.fr.one();
     denominators[0] = E.fr.one();
 
-    for (int index = 0 ; index < domainSize; index++) {
+    for (int64_t index = 0 ; index < domainSize; index++) {
         E.fr.mul(betaW[index], chBeta, w);
         E.fr.mul(w, w, wFactor);
     }
 
-    for (int index = 0 ; index < domainSize; index++) {
+    #pragma omp parallel for
+    for (int64_t index = 0 ; index < domainSize; index++) {
         // computePermutationPolynomialZLoop(index, n, numerator, denominator, betaW);
-        computePermutationPolynomialZLoop(index, n, numerators[(index+1) % domainSize], numerators[(index+1) % domainSize], betaW[index]);
+        computePermutationPolynomialZLoop(index, n, numerators[(index+1) % domainSize], denominators[(index+1) % domainSize], betaW[index]);
     }
 
-    #pragma omp parallel for
-    for (int index = 0 ; index < domainSize; index++) {
-        E.fr.mul(numerators[(index+1) % domainSize], numerators[index], numerators[(index+1) % domainSize]);
-        E.fr.mul(denominators[(index+1) % domainSize], denominators[index], denominators[(index+1) % domainSize]);
+    for (int64_t index = 0 ; index < domainSize; index++) {
+        int64_t index1 = (index+1) % domainSize;
+        int64_t index2 = (index+2) % domainSize;
+        E.fr.mul(numerators[index2], numerators[index2], numerators[index1]);
+        E.fr.mul(denominators[index2], denominators[index2], denominators[index1]);
     }
 
     calculateInverses(denominators);  
@@ -287,7 +222,7 @@ void Prover<Engine>::computePermutationPolynomialZ ( void )
 }
 
 template <typename Engine>
-void Prover<Engine>::computePermutationPolynomialZLoop ( int index, int n, FrElement &numerator, FrElement &denominator, const FrElement &betaW ) 
+void Prover<Engine>::computePermutationPolynomialZLoop ( int64_t index, int64_t n, FrElement &numerator, FrElement &denominator, const FrElement &betaW ) 
 {
     FrElement aux;
     
@@ -400,12 +335,12 @@ void Prover<Engine>::computeQuotientPolynomial ( void )
 
     FrElements w(domainSize4);
     w[0] = E.fr.one();
-    for (u_int64_t i = 1; i < domainSize4; ++ i) {
+    for (int64_t i = 1; i < domainSize4; ++i) {
         E.fr.mul(w[i], w[i-1], wFactorPlus2);        
     }
 
     #pragma omp parallel for
-    for (u_int64_t i = 0; i < domainSize4; ++ i) {
+    for (int64_t i = 0; i < domainSize4; ++i) {
         auto a = polA4[i];
         auto b = polB4[i];
         auto c = polC4[i];
@@ -429,7 +364,7 @@ void Prover<Engine>::computeQuotientPolynomial ( void )
         auto zWp = E.fr.add(E.fr.add(E.fr.mul(randomBlindings[7], wW2), E.fr.mul(randomBlindings[8], wW)), randomBlindings[9]);
 
         auto pl = E.fr.zero();
-        for (u_int64_t j = 0; j < nPublic; ++j) {
+        for (int64_t j = 0; j < nPublic; ++j) {
             pl = E.fr.sub(pl, E.fr.mul(lPols[j * 5 * domainSize + domainSize + i], A[j]));
         }
 
@@ -507,11 +442,11 @@ void Prover<Engine>::computeQuotientPolynomial ( void )
     evaluationsToCoefficients(_T);
 
     #pragma omp parallel for
-    for (u_int64_t i = 0; i < domainSize; ++i) {
+    for (int64_t i = 0; i < domainSize; ++i) {
         _T[i] = E.fr.neg(_T[i]);
     }
 
-    for (u_int64_t i = domainSize; i < domainSize4; ++i) {
+    for (int64_t i = domainSize; i < domainSize4; ++i) {
         _T[i] = E.fr.sub(_T[ i - domainSize ], _T[i]);
         if (i > (domainSize * 3 - 4)) {
             ASSERT(E.fr.isZero(_T[i]), "T polynomial is not divisible");
@@ -520,7 +455,7 @@ void Prover<Engine>::computeQuotientPolynomial ( void )
     evaluationsToCoefficients(_Tz);
 
     #pragma omp parallel for
-    for (u_int64_t i = 0; i < domainSize4; ++i) {
+    for (int64_t i = 0; i < domainSize4; ++i) {
         if (i > (domainSize*3+5) ) {
             stringstream ss;
             ss << "Tz Polynomial is not well calculated Tz[" << i << "] != 0  domainSize:" << domainSize <<  " domainSize*3+5:" << (domainSize*3+5);
@@ -559,6 +494,8 @@ typename Prover<Engine>::FrElement Prover<Engine>::evaluatePolynomial( const FrE
 template <typename Engine>
 void Prover<Engine>::round4( void ) 
 {
+    LOG_TRACE("Plonk - Round 4");
+
     calculateChallengeXi();
 
     proofEvalA = evaluatePolynomial(polA, chXi);
@@ -657,6 +594,7 @@ void Prover<Engine>::settingZn ( void )
 template <typename Engine>
 void Prover<Engine>::round5( void ) 
 {
+    LOG_TRACE("Plonk - Round 5");
     calculateChallengeV();
 
     u_int64_t extraDomainSize = domainSize + 6;
@@ -714,6 +652,8 @@ void Prover<Engine>::round5( void )
 template <typename Engine>
 void Prover<Engine>::composeProof ( Proof<Engine> &proof )
 {
+    LOG_TRACE("Plonk - compose proof");
+
     E.g1.copy(proof.A, proofA);
     E.g1.copy(proof.B, proofB);
     E.g1.copy(proof.C, proofC);
@@ -753,11 +693,11 @@ typename Prover<Engine>::FrElements Prover<Engine>::div1(const FrElements &pol, 
 template <typename Engine>
 void Prover<Engine>::multiplicateElements(FrElements &destination, FrElements &a, FrElements &b)
 {
-    u_int64_t elementsCount = a.size();
+    int64_t elementsCount = a.size();
     destination.resize(elementsCount);
 
     #pragma omp parallel for
-    for (u_int64_t index = 0; index < elementsCount; index++)
+    for (int64_t index = 0; index < elementsCount; index++)
     {
         E.fr.mul(destination[index], a[index], b[index]);
     }
@@ -767,11 +707,11 @@ template <typename Engine>
 void Prover<Engine>::calculateInverses(FrElements &elements)
 {
     // Calculate products: a, ab, abc, abcd, ...
-    u_int64_t elementsCount = elements.size();
+    int64_t elementsCount = elements.size();
     FrElements products(elementsCount);
 
     products[0] = elements[0];
-    for (u_int64_t index = 1; index < elementsCount; index++)
+    for (int64_t index = 1; index < elementsCount; index++)
     {
         E.fr.mul(products[index], products[index-1], elements[index]);
     }
@@ -779,24 +719,24 @@ void Prover<Engine>::calculateInverses(FrElements &elements)
     // Calculate inverses: 1/a, 1/ab, 1/abc, 1/abcd, ...
     FrElements inverses(elementsCount);
     E.fr.inv(inverses[elementsCount - 1], products[elementsCount - 1]);
-    for (u_int64_t index = elementsCount - 1; index > 0; index--)
+    for (int64_t index = elementsCount - 1; index > 0; index--)
     {
         E.fr.mul(inverses[index - 1], inverses[index], elements[index]);
     }
 
     elements[0] = inverses[0];
-    for (u_int64_t index = 1; index < elementsCount; index++)
+    for (int64_t index = 1; index < elementsCount; index++)
     {
         E.fr.mul(elements[index], inverses[index], products[index - 1]);
     }
 }
 
 template <typename Engine>
-typename Prover<Engine>::FrElements Prover<Engine>::extendPolynomial ( const FrElements &polynomial, u_int32_t size ) 
+typename Prover<Engine>::FrElements Prover<Engine>::extendPolynomial ( const FrElements &polynomial, int64_t size ) 
 {
     FrElements polynomial4T(size);
     #pragma omp parallel for
-    for (u_int32_t index = 0; index < size; ++index) {
+    for (int64_t index = 0; index < size; ++index) {
         polynomial4T[index] = (index < polynomial.size()) ? polynomial[index] : E.fr.zero();
         // polynomial4T[index] = polynomial[index % polynomial.size()];
     }
@@ -932,7 +872,9 @@ void Proof<Engine>::put(stringstream &ss, const std::string &name, typename Engi
 }
 
 template <typename Engine>
-void Prover<Engine>::calculateAdditions(void) {
+void Prover<Engine>::calculateAdditions(void) 
+{
+    LOG_TRACE("Plonk - calculate additions");
 
     for (u_int64_t i=0; i<nAdditions; i++) {
         FrElement aWitness, bWitness, ac_aw, bc_bw;
@@ -975,9 +917,9 @@ typename Prover<Engine>::FrElement Prover<Engine>::getWitness(u_int32_t index)
 // TODO: this method should be inside the G1P class.
 
 template <typename Engine>
-u_int64_t Prover<Engine>::toRprBE(G1P &point, uint8_t *data, u_int64_t seek, u_int64_t size)
+u_int64_t Prover<Engine>::toRprBE(G1P &point, uint8_t *data, int64_t seek, int64_t size)
 {
-    u_int64_t bytes = E.g1.F.bytes() * 2;
+    int64_t bytes = E.g1.F.bytes() * 2;
     G1Pa p;
 
     E.g1.copy(p, point);
@@ -992,7 +934,7 @@ u_int64_t Prover<Engine>::toRprBE(G1P &point, uint8_t *data, u_int64_t seek, u_i
 }
 
 template <typename Engine>
-void Prover<Engine>::hashToFr(FrElement &element, u_int8_t *data, u_int64_t size)
+void Prover<Engine>::hashToFr(FrElement &element, u_int8_t *data, int64_t size)
 {
     // Keccak keccak;
     // std::string hash = keccak(data, size, true);
@@ -1006,7 +948,7 @@ template <typename Engine>
 void Prover<Engine>::calculateChallengeBeta(void)
 {
     u_int8_t data[E.g1.F.N64 * 8 * 2 * 3];
-    size_t bytes = 0;
+    int64_t bytes = 0;
 
     memset(data, 0, sizeof(data));
 
@@ -1021,7 +963,7 @@ template <typename Engine>
 void Prover<Engine>::calculateChallengeGamma(void)
 {
     u_int8_t data[E.fr.bytes()];
-    size_t bytes = 0;
+    int64_t bytes = 0;
 
     bytes = E.fr.toRprBE(chBeta, data, sizeof(data));
     hashToFr(chGamma, data, bytes);
@@ -1031,7 +973,7 @@ template <typename Engine>
 void Prover<Engine>::calculateChallengeAlpha(void)
 {
     u_int8_t data[E.fr.bytes() * 2];
-    size_t bytes = 0;
+    int64_t bytes = 0;
 
     bytes = toRprBE(proofZ, data, 0, sizeof(data));
     hashToFr(chAlpha, data, bytes);
@@ -1041,7 +983,7 @@ template <typename Engine>
 void Prover<Engine>::calculateChallengeXi(void)
 {
     u_int8_t data[E.g1.F.bytes() * 2 * 3];
-    size_t bytes = 0;
+    int64_t bytes = 0;
 
     memset(data, 0, sizeof(data));
 
@@ -1056,7 +998,7 @@ template <typename Engine>
 void Prover<Engine>::calculateChallengeV(void)
 {
     u_int8_t data[E.fr.bytes() * 7];
-    size_t bytes = 0;
+    int64_t bytes = 0;
     chV.resize(7);
 
     memset(data, 0, sizeof(data));
@@ -1075,5 +1017,65 @@ void Prover<Engine>::calculateChallengeV(void)
     }
 }
 
+template <typename Engine>
+std::unique_ptr<::Prover<Engine>> makeProver(
+    u_int32_t nVars, 
+    u_int32_t nPublic, 
+    u_int32_t domainSize,
+    u_int32_t nConstrains,
+    u_int32_t nAdditions,
+    u_int32_t lPolsSize,
+    u_int32_t nPtau,
+    void *k1,
+    void *k2,
+    void *qm,
+    void *ql,
+    void *qr,
+    void *qo,
+    void *qc,
+    void *additions,
+    void *mapA,
+    void *mapB,
+    void *mapC,
+    void *QM,
+    void *QL,
+    void *QR,
+    void *QO,
+    void *QC,
+    void *lPols,
+    void *ptau,
+    void *sigmas
+) {
+    Prover<Engine> *p = new Prover<Engine>(
+        Engine::engine, 
+        nVars, 
+        nPublic, 
+        domainSize, 
+        nConstrains,
+        nAdditions,
+        lPolsSize,
+        nPtau,
+        *(typename Engine::FrElement *) k1,
+        *(typename Engine::FrElement *) k2,
+        *(typename Engine::FrElement *) qm,
+        *(typename Engine::FrElement *) ql,
+        *(typename Engine::FrElement *) qr,
+        *(typename Engine::FrElement *) qo,
+        *(typename Engine::FrElement *) qc,
+        (Additional<Engine> *)((uint64_t) additions),
+        (u_int32_t *)mapA,
+        (u_int32_t *)mapB,
+        (u_int32_t *)mapC,
+        (typename Engine::FrElement *) QM,
+        (typename Engine::FrElement *) QL,
+        (typename Engine::FrElement *) QR,
+        (typename Engine::FrElement *) QO,
+        (typename Engine::FrElement *) QC,        
+        (typename Engine::FrElement *) lPols,        
+        (typename Engine::G1PointAffine *)ptau,
+        (typename Engine::FrElement *) sigmas
+    );
+    return std::unique_ptr< Prover<Engine> >(p);
+}
 
 } // namespace

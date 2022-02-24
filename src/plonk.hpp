@@ -184,10 +184,10 @@ namespace Plonk {
             nConstrains(_nConstrains),
             nAdditions(_nAdditions),
             additions(_additions),
+            ptau(_ptau, _ptau + (_nPtau/sizeof(typename Engine::G1PointAffine))),
             mapA(_mapA),
             mapB(_mapB),
             mapC(_mapC),
-            ptau(_ptau, _ptau + (_nPtau/sizeof(typename Engine::G1PointAffine))),
             A(_domainSize),
             B(_domainSize),
             C(_domainSize),
@@ -245,7 +245,7 @@ namespace Plonk {
             void coefficientsToEvaluations ( FrElements &polynomial );
             void setMontgomeryPolynomialFromWitnessMap ( FrElements &polynomial, u_int32_t *map );
 
-            FrElements extendPolynomial ( const FrElements &polynomial, u_int32_t size );
+            FrElements extendPolynomial ( const FrElements &polynomial, int64_t size );
             void polynomialToMontgomery ( FrElements &polynomial );
             void polynomialFromMontgomery ( FrElements &polynomial );
             typename Engine::G1Point expTau ( FrElements &polynomial );
@@ -255,15 +255,15 @@ namespace Plonk {
             void calculateChallengeXi ( void );
             void calculateChallengeV ( void );
             void computePermutationPolynomialZ ( void );
-            inline void computePermutationPolynomialZLoop ( int index, int n, FrElement &numerator, FrElement &denominator, const FrElement &betaW );
+            inline void computePermutationPolynomialZLoop ( int64_t index, int64_t n, FrElement &numerator, FrElement &denominator, const FrElement &betaW );
             void computeQuotientPolynomial ( void );
             FrElement evaluatePolynomial( const FrElements &pol, const FrElement &x );
-            void loadFrElements ( FrElements &destination, const FrElement *source, u_int32_t offset, u_int32_t count, u_int32_t seek = 0 ); 
+            void loadFrElements ( FrElements &destination, const FrElement *source, int64_t offset, int64_t count, int64_t seek = 0 ); 
             void loadSigmas ( FrElement *sigmas );
             void calculateInverses ( FrElements &source );
             void multiplicateElements ( FrElements &destination, FrElements &a, FrElements &b );
-            u_int64_t toRprBE(G1P &point, uint8_t *data, u_int64_t seek, u_int64_t size);
-            void hashToFr(FrElement &element, u_int8_t *data, u_int64_t size);
+            u_int64_t toRprBE(G1P &point, uint8_t *data, int64_t seek, int64_t size);
+            void hashToFr(FrElement &element, u_int8_t *data, int64_t size);
             void settingZn ( void );
             inline void mul2 ( FrElement &r, FrElement &rz, const FrElement &a, const FrElement &b, const FrElement &ap, 
                                const FrElement &bp, int64_t p = -1 );
