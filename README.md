@@ -29,13 +29,14 @@ npx task buildProver
 
 You have a full prover compiled in the build directory.
 
-So you can replace snarkjs command:
+So you can replace snarkjs commands
 
 ````sh
 snarkjs groth16 prove <circuit.zkey> <witness.wtns> <proof.json> <public.json>
+snarkjs plonk prove <circuit.zkey> <witness.wtns> <proof.json> <public.json>
 ````
 
-by this one
+by this one. this program loads the zkey where this the type of proof to generate is specified (groth16 or plonk).
 ````sh
 ./build/prove <circuit.zkey> <witness.wtns> <proof.json> <public.json>
 ````
@@ -47,6 +48,7 @@ This prover uses intel assembly with ADX extensions and parallelizes as much as 
 The prover is much faster that snarkjs and faster than bellman.
 
 [TODO] Some comparation tests should be done.
+[TODO] Some bechmarks test with plonk version.
 
 
 ## License

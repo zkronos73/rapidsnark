@@ -138,7 +138,7 @@ namespace Plonk {
         FrElement proofEvalA, proofEvalB, proofEvalC, proofEvalS1, proofEvalS2;
         FrElement proofEvalT, proofEvalZw, proofEvalR;
 
-        FrElements polT;
+        FrElements polT, polTz;
         FrElements lPols;
 
         FrElement Z1[4];
@@ -250,7 +250,9 @@ namespace Plonk {
             FrElements extendPolynomial ( const FrElements &polynomial, int64_t size );
             void polynomialToMontgomery ( FrElements &polynomial );
             void polynomialFromMontgomery ( FrElements &polynomial );
-            typename Engine::G1Point expTau ( FrElements &polynomial );
+            FrElements polynomialFromMontgomery ( const FrElements &polynomial, int64_t from = 0, int64_t count = -1 );
+            FrElements polynomialToMontgomery ( const FrElements &polynomial, int64_t from = 0, int64_t count = -1 );
+            typename Engine::G1Point expTau ( const FrElements &polynomial, int64_t from = 0, int64_t count = -1 );
             void calculateChallengeBeta ( void );
             void calculateChallengeGamma ( void );
             void calculateChallengeAlpha ( void );
@@ -258,6 +260,9 @@ namespace Plonk {
             void calculateChallengeV ( void );
             
             void computeFirstOutput ( void );
+            void computeSecondOutput ( void );
+            void computeOpeningEvaluationsRound4 ( void );
+            void splitPolynomialAndComputeThirdOutput ( void );
             void computeWirePolynomials ( void );
             void computePermutationPolynomialZ ( void );
             inline void computePermutationPolynomialZLoop ( int64_t index, int64_t n, FrElement &numerator, FrElement &denominator, const FrElement &betaW );
