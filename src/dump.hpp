@@ -25,9 +25,8 @@ namespace Dump {
         bool showValues;
         void setShowValues ( bool value ) { showValues = value; };
         std::string getLiteHash(const std::string &data);
-        std::string getShake128(const void *data, u_int32_t len);
+        std::string getHash(const void *data, u_int32_t len);
     };
 }
 
-#include "dump.cpp"
 #endif

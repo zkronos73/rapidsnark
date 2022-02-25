@@ -1,10 +1,8 @@
 #include "dump.hpp"
+#include "keccak_wrapper.hpp"
 
 #include <iostream>
 #include <iomanip>
-
-#include <openssl/sha.h>
-#include <openssl/evp.h>
 
 namespace Dump {
 
@@ -135,21 +133,15 @@ std::string Dump<Engine>::getColorLiteHash(const std::string &data)
 template <typename Engine>
 std::string Dump<Engine>::getLiteHash(const std::string &data)
 {
-    std::string hash = getShake128(data.c_str(), data.length());
+    std::string hash = getHash(data.c_str(), data.length());
     return hash.substr(0, 4) + hash.substr(28, 4);
 }
 
 template <typename Engine>
-std::string Dump<Engine>::getShake128(const void *data, u_int32_t len)
+std::string Dump<Engine>::getHash(const void *data, u_int32_t len)
 {
-    unsigned char digest[16];
-    unsigned int outLen;
-    EVP_MD_CTX* ctx = EVP_MD_CTX_create();
-
-    EVP_DigestInit(ctx, EVP_shake128());
-    EVP_DigestUpdate(ctx, data, len);
-    EVP_DigestFinal(ctx, digest, &outLen);
-    EVP_MD_CTX_destroy(ctx);
+    unsigned char digest[32];
+    unsigned int outLen = keccak(data, len, digest, sizeof(digest));
 
     std::stringstream ss;
     for (int i=0; i<outLen; i++) {

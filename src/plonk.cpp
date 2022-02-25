@@ -3,13 +3,19 @@
 #include <fcntl.h>
 
 #include <sodium.h>
-#include "../depends/xkcp/Standalone/CompactFIPS202/C/Keccak-more-compact.c"
 
 #include <iostream>
 #include <iomanip>
 
 #include "logger.hpp"
 #include "plonk.hpp"
+#include "keccak_wrapper.hpp"
+
+#ifdef _OPENMP_PLONK_
+   #include <omp.h>
+#else
+   #define omp_get_thread_num() 0
+#endif
 
 using namespace CPlusPlusLogging;
 
@@ -90,23 +96,8 @@ void Prover<Engine>::round1 ( void )
     LOG_TRACE("Plonk - Round 1");
 
     generateRandomBlindingScalars(randomBlindings);
-
-    setMontgomeryPolynomialFromWitnessMap(A, mapA);
-    polA.assign(A.begin(), A.end());
-
-    setMontgomeryPolynomialFromWitnessMap(B, mapB);
-    polB = B;
-
-    setMontgomeryPolynomialFromWitnessMap(C, mapC);
-    polC = C;
-
-    polA4 = buildPolynomial(polA, randomBlindings, {2, 1});
-    polB4 = buildPolynomial(polB, randomBlindings, {4, 3});
-    polC4 = buildPolynomial(polC, randomBlindings, {6, 5});
-
-    proofA = expTau(polA);
-    proofB = expTau(polB);
-    proofC = expTau(polC);
+    computeWirePolynomials();
+    computeFirstOutput();
 }
 
 template <typename Engine>
@@ -130,6 +121,45 @@ void Prover<Engine>::round3 ( void )
 }
 
 template <typename Engine>
+void Prover<Engine>::computeWirePolynomials ( void )
+{
+    #pragma omp parallel
+    {
+        #pragma omp sections 
+        {
+            #pragma omp section
+            {        
+                setMontgomeryPolynomialFromWitnessMap(A, mapA);
+                polA = A;
+                polA4 = buildPolynomial(polA, randomBlindings, {2, 1});
+                proofA = expTau(polA);
+            }
+
+            #pragma omp section 
+            {
+                setMontgomeryPolynomialFromWitnessMap(B, mapB);
+                polB = B;
+                polB4 = buildPolynomial(polB, randomBlindings, {4, 3});
+                proofB = expTau(polB);
+            }
+
+            #pragma omp section 
+            {
+                setMontgomeryPolynomialFromWitnessMap(C, mapC);
+                polC = C;
+                polC4 = buildPolynomial(polC, randomBlindings, {6, 5});
+                proofC = expTau(polC);
+            }
+        }
+    }
+}
+
+template <typename Engine>
+void Prover<Engine>::computeFirstOutput ( void ) 
+{
+}
+
+template <typename Engine>
 typename Engine::G1Point Prover<Engine>::expTau ( FrElements &polynomial ) 
 {
     G1P value;
@@ -148,12 +178,11 @@ void Prover<Engine>::generateRandomBlindingScalars ( FrElements &randomBlindings
     randomBlindings[0] = E.fr.zero();
     for (int i=0; i<9; ++i) {
         randombytes_buf((void *)&(randomBlindings[i].v[0]), sizeof(randomBlindings[0])-1);
-        randombytes_buf((void *)&(randomBlindings[i].v[0]), sizeof(randomBlindings[0])-1);
     }    
 }
 
 template <typename Engine>
-typename Prover<Engine>::FrElements Prover<Engine>::buildPolynomial ( FrElements &polynomial, FrElements &randomBlindings, std::vector<u_int32_t> randomBlindingIndexs ) 
+typename Prover<Engine>::FrElements Prover<Engine>::buildPolynomial ( FrElements &polynomial, const FrElements &randomBlindings, const std::vector<u_int32_t> randomBlindingIndexs ) 
 {
     evaluationsToCoefficients(polynomial);
 
@@ -738,7 +767,6 @@ typename Prover<Engine>::FrElements Prover<Engine>::extendPolynomial ( const FrE
     #pragma omp parallel for
     for (int64_t index = 0; index < size; ++index) {
         polynomial4T[index] = (index < polynomial.size()) ? polynomial[index] : E.fr.zero();
-        // polynomial4T[index] = polynomial[index % polynomial.size()];
     }
     return polynomial4T;
 }
@@ -747,14 +775,12 @@ template <typename Engine>
 inline void Prover<Engine>::evaluationsToCoefficients ( FrElements &polynomial ) 
 {
     fft->ifft(polynomial.data(), polynomial.size());
-    // fft->ifft(polynomial.data(), domainSize);
 }
 
 template <typename Engine>
 inline void Prover<Engine>::coefficientsToEvaluations ( FrElements &polynomial ) 
 {
     fft->fft(polynomial.data(), polynomial.size());
-    // fft->fft(polynomial.data(), domainSize);
 }
 
 template <typename Engine>
@@ -936,11 +962,8 @@ u_int64_t Prover<Engine>::toRprBE(G1P &point, uint8_t *data, int64_t seek, int64
 template <typename Engine>
 void Prover<Engine>::hashToFr(FrElement &element, u_int8_t *data, int64_t size)
 {
-    // Keccak keccak;
-    // std::string hash = keccak(data, size, true);
-    // E.fr.fromRprBE(element, (const u_int8_t*) hash.c_str(), 32);
     u_int8_t hash[32];
-    Keccak(1088, 512, data, size, 0x01, hash, sizeof(hash));
+    keccak(data, size, hash, sizeof(hash));
     E.fr.fromRprBE(element, hash, sizeof(hash));
 }
 

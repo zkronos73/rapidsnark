@@ -2,6 +2,7 @@
 #define __RAPIDSNARK__PLONK_H__
 
 #include <string>
+#include <utility>
 #include <nlohmann/json.hpp>
 using json = nlohmann::json;
 
@@ -239,8 +240,9 @@ namespace Plonk {
             void round3 ( void );
             void round4 ( void );
             void round5 ( void );
+
             void generateRandomBlindingScalars ( FrElements &randomBlindings );
-            FrElements buildPolynomial ( FrElements &polynomial, FrElements &randomBlindings, std::vector<u_int32_t> randomBlindingIndexs );
+            FrElements buildPolynomial ( FrElements &polynomial, const FrElements &randomBlindings, const std::vector<u_int32_t> randomBlindingIndexs );
             void evaluationsToCoefficients ( FrElements &polynomial );
             void coefficientsToEvaluations ( FrElements &polynomial );
             void setMontgomeryPolynomialFromWitnessMap ( FrElements &polynomial, u_int32_t *map );
@@ -254,6 +256,9 @@ namespace Plonk {
             void calculateChallengeAlpha ( void );
             void calculateChallengeXi ( void );
             void calculateChallengeV ( void );
+            
+            void computeFirstOutput ( void );
+            void computeWirePolynomials ( void );
             void computePermutationPolynomialZ ( void );
             inline void computePermutationPolynomialZLoop ( int64_t index, int64_t n, FrElement &numerator, FrElement &denominator, const FrElement &betaW );
             void computeQuotientPolynomial ( void );

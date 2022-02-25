@@ -29,7 +29,7 @@ class FullProver {
 
     std::unique_ptr<BinFileUtils::BinFile> zkey;
 
-    std::unique_ptr<Groth16::Prover<AltBn128::Engine>> prover;
+    std::unique_ptr<Prover<AltBn128::Engine>, std::default_delete<Prover<AltBn128::Engine> > > prover;
 
     Circom_Circuit *loadCircuit(std::string const &datFileName);
     bool isCanceled();

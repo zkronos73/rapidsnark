@@ -1,4 +1,3 @@
-const snarkjs = require('snarkjs');
 const path = require('path');
 const assert = require('assert');
 const fs = require('fs');
